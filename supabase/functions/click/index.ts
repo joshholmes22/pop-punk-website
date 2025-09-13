@@ -3,9 +3,23 @@ import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { v4 as uuidv4 } from "https://deno.land/std/uuid/mod.ts";
 
+// Your Amplify frontend origin
+const FRONTEND_ORIGIN = "https://main.dwiydknls6vhq.amplifyapp.com";
+
 serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(),
+    });
+  }
+
   if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: corsHeaders(),
+    });
   }
 
   const body = await req.json();
@@ -57,7 +71,6 @@ serve(async (req) => {
     },
   ]);
 
-  // Call Meta CAPI
   const payload = {
     event_name: "OutboundClick",
     event_time: Math.floor(Date.now() / 1000),
@@ -94,7 +107,15 @@ serve(async (req) => {
   }
 
   return new Response(null, {
-    status: 302,
-    headers: { Location: redirect_url },
+    status: 200,
+    headers: corsHeaders(),
   });
 });
+
+function corsHeaders(): HeadersInit {
+  return {
+    "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
