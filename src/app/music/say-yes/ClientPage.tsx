@@ -100,13 +100,17 @@ export default function SayYesPage() {
     };
 
     try {
-      await fetch("https://dwidyklnls6vhq.functions.supabase.co/click", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+      await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/click`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify(body),
+        }
+      );
 
       window.location.href = url;
     } catch (err) {
