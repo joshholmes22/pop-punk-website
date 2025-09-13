@@ -100,13 +100,16 @@ export default function SayYesPage() {
     };
 
     try {
-      await fetch("/api/click", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+      await fetch(
+        `https://${process.env.SUPABASE_PROJECT_ID}.functions.supabase.co/click`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        }
+      );
 
       window.location.href = url;
     } catch (err) {
