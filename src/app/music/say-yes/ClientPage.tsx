@@ -13,25 +13,29 @@ const PLATFORMS = [
     name: "Spotify",
     provider: "spotify",
     url: "https://open.spotify.com/album/6J9HevGlG19p566hxZnIwH",
-    color: "bg-green-500",
+    color: "#1ED760",
+    icon: "/icons/spotify.svg",
   },
   {
     name: "Apple Music",
     provider: "apple",
     url: "https://music.apple.com/gb/album/say-yes-single/1818304777",
-    color: "bg-pink-500",
+    color: "#FF4E6B",
+    icon: "/icons/apple-music.svg",
   },
   {
     name: "YouTube",
     provider: "youtube",
     url: "https://www.youtube.com/playlist?list=OLAK5uy_lhwH0Vot2qcESzMu5W1mEc_x4QnC5xjC8",
-    color: "bg-red-500",
+    color: "#FF0033",
+    icon: "/icons/youtube.svg",
   },
   {
     name: "Deezer",
     provider: "deezer",
     url: "https://www.deezer.com/en/album/766717521",
-    color: "bg-blue-500",
+    color: "#a238ff",
+    icon: "/icons/deezer.svg",
   },
 ];
 
@@ -147,7 +151,7 @@ export default function SayYesPage() {
 
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center justify-center gap-2">
-              🎵 Say Yes - Josh Holmes
+              Say Yes - Josh Holmes
             </h1>
             <p className="text-sm text-white/80 mt-1">
               Stream the new catchy pop punk song now.
@@ -156,14 +160,21 @@ export default function SayYesPage() {
 
           <button
             onClick={() => handleClick(spotify.provider, spotify.url, "hero")}
-            className="w-full py-3 text-lg font-semibold text-white rounded-lg shadow hover:brightness-110 transition-all bg-green-500"
+            style={{ backgroundColor: spotify.color }}
+            className="w-full py-2.5 text-white font-semibold rounded-xl shadow transition hover:brightness-110 flex items-center justify-center gap-2 cursor-pointer"
           >
-            🎧 Listen on Spotify
+            <Image
+              src={spotify.icon}
+              alt={spotify.provider}
+              width={20}
+              height={20}
+            />{" "}
+            {spotify.name}
           </button>
 
           <button
             onClick={() => setShowMore(!showMore)}
-            className="text-sm text-white/70 hover:text-white underline"
+            className="text-sm text-white/70 hover:text-white underline cursor-pointer"
           >
             {showMore ? "Hide other platforms" : "More Platforms"}
           </button>
@@ -174,8 +185,10 @@ export default function SayYesPage() {
                 <li key={p.provider}>
                   <button
                     onClick={() => handleClick(p.provider, p.url, "list")}
-                    className={`w-full py-2.5 text-white font-medium rounded-lg shadow transition hover:brightness-110 ${p.color}`}
+                    style={{ backgroundColor: p.color }}
+                    className="w-full py-2.5 text-white font-semibold rounded-xl shadow transition hover:brightness-110 flex items-center justify-center gap-2 cursor-pointer"
                   >
+                    <Image src={p.icon} alt={p.name} width={20} height={20} />{" "}
                     {p.name}
                   </button>
                 </li>
@@ -190,7 +203,7 @@ export default function SayYesPage() {
                 href={s.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="opacity-80 hover:opacity-100 transition"
+                className="opacity-80 hover:opacity-100 transition cursor-pointer"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={s.icon} alt={s.name} className="w-6 h-6" />
