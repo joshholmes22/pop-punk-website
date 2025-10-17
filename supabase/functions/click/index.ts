@@ -31,7 +31,16 @@ serve(async (req) => {
       position,
       utms,
       redirect_url,
+      event_source_url,
     } = body;
+
+    // Validate Meta credentials
+    const metaPixelId = Deno.env.get("META_PIXEL_ID");
+    const metaCapiToken = Deno.env.get("META_CAPI_TOKEN");
+    
+    if (!metaPixelId || !metaCapiToken) {
+      console.error("Missing Meta credentials: META_PIXEL_ID or META_CAPI_TOKEN");
+    }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -67,17 +76,22 @@ serve(async (req) => {
       },
     ]);
 
+    // Build user_data, excluding null values
+    const user_data: Record<string, string> = {
+      client_ip_address: ip,
+      client_user_agent: ua,
+    };
+    
+    if (fbp) user_data.fbp = fbp;
+    if (fbc) user_data.fbc = fbc;
+
     const payload = {
       event_name: "OutboundClick",
       event_time: Math.floor(Date.now() / 1000),
       event_id,
       action_source: "website",
-      user_data: {
-        client_ip_address: ip,
-        client_user_agent: ua,
-        fbp,
-        fbc,
-      },
+      event_source_url: event_source_url || FRONTEND_ORIGIN,
+      user_data,
       custom_data: {
         provider,
         track_id,
@@ -86,20 +100,40 @@ serve(async (req) => {
       },
     };
 
-    const res = await fetch(
-      `https://graph.facebook.com/v18.0/${Deno.env.get("META_PIXEL_ID")}/events`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: [payload],
-          access_token: Deno.env.get("META_CAPI_TOKEN")!,
-        }),
-      }
-    );
+    // Only send to Meta if credentials are available
+    if (metaPixelId && metaCapiToken) {
+      const metaPayload: Record<string, unknown> = {
+        data: [payload],
+        access_token: metaCapiToken,
+      };
 
-    if (!res.ok) {
-      console.error("Meta CAPI response", await res.json());
+      // Add test_event_code if in development/testing
+      const testEventCode = Deno.env.get("META_TEST_EVENT_CODE");
+      if (testEventCode) {
+        metaPayload.test_event_code = testEventCode;
+      }
+
+      const res = await fetch(
+        `https://graph.facebook.com/v18.0/${metaPixelId}/events`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(metaPayload),
+        }
+      );
+
+      const metaResponse = await res.json();
+      
+      if (!res.ok) {
+        console.error("Meta CAPI Error:", {
+          status: res.status,
+          statusText: res.statusText,
+          response: metaResponse,
+          payload: payload,
+        });
+      } else {
+        console.log("Meta CAPI Success:", metaResponse);
+      }
     }
 
     return new Response(JSON.stringify({ success: true }), {

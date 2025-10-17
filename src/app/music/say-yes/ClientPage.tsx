@@ -101,6 +101,8 @@ export default function SayYesPage() {
       position,
       utms,
       redirect_url: url,
+      event_source_url:
+        typeof window !== "undefined" ? window.location.href : undefined,
     };
 
     try {

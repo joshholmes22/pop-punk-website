@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
     position,
     utms,
     redirect_url,
+    event_source_url,
   } = body;
 
   // 🔁 Deduplication check (ip + track_id + provider)
@@ -108,17 +109,22 @@ export async function POST(req: NextRequest) {
     },
   ]);
 
+  // Build user_data, excluding null values
+  const user_data: Record<string, string> = {
+    client_ip_address: ip,
+    client_user_agent: ua,
+  };
+  
+  if (fbp) user_data.fbp = fbp;
+  if (fbc) user_data.fbc = fbc;
+
   const capiPayload = {
     event_name: "OutboundClick",
     event_time: Math.floor(Date.now() / 1000),
     event_id,
     action_source: "website",
-    user_data: {
-      client_ip_address: ip,
-      client_user_agent: ua,
-      fbp,
-      fbc,
-    },
+    event_source_url: event_source_url || "https://www.joshholmesmusic.com",
+    user_data,
     custom_data: {
       provider,
       track_id,
@@ -127,17 +133,43 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const res = await fetch(CAPI_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  // Only send to Meta if credentials are configured
+  if (process.env.META_PIXEL_ID && process.env.META_CAPI_TOKEN) {
+    const metaPayload: Record<string, unknown> = {
       data: [capiPayload],
-      access_token: process.env.META_CAPI_TOKEN!,
-    }),
-  });
+      access_token: process.env.META_CAPI_TOKEN,
+    };
 
-  const resBody = await res.json();
-  console.log("Meta CAPI response", resBody);
+    // Add test_event_code if in development/testing
+    if (process.env.META_TEST_EVENT_CODE) {
+      metaPayload.test_event_code = process.env.META_TEST_EVENT_CODE;
+    }
+
+    try {
+      const res = await fetch(CAPI_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(metaPayload),
+      });
+
+      const resBody = await res.json();
+      
+      if (!res.ok) {
+        console.error("Meta CAPI Error:", {
+          status: res.status,
+          statusText: res.statusText,
+          response: resBody,
+          payload: capiPayload,
+        });
+      } else {
+        console.log("Meta CAPI Success:", resBody);
+      }
+    } catch (error) {
+      console.error("Meta CAPI Request Failed:", error);
+    }
+  } else {
+    console.warn("Meta CAPI credentials not configured");
+  }
 
   return NextResponse.redirect(redirect_url, { status: 302 });
 }
