@@ -44,7 +44,11 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const ip = req.headers.get("x-forwarded-for") || "0.0.0.0";
+    // Extract the first (client) IP from x-forwarded-for header
+    // Format can be: "client, proxy1, proxy2" or "client"
+    const forwardedFor = req.headers.get("x-forwarded-for") || "0.0.0.0";
+    const ip = forwardedFor.split(",")[0].trim();
+    
     const ua = req.headers.get("user-agent") || "";
     const cookie = req.headers.get("cookie") || "";
     const fbp = cookie.match(/_fbp=([^;]+)/)?.[1] || null;
@@ -85,7 +89,8 @@ serve(async (req) => {
     if (fbp) user_data.fbp = fbp;
     if (fbc) user_data.fbc = fbc;
 
-    const payload = {
+    // Custom event for detailed tracking
+    const customPayload = {
       event_name: "OutboundClick",
       event_time: Math.floor(Date.now() / 1000),
       event_id,
@@ -100,10 +105,30 @@ serve(async (req) => {
       },
     };
 
+    // Standard Lead conversion event for ad optimization
+    const leadPayload = {
+      event_name: "Lead",
+      event_time: Math.floor(Date.now() / 1000),
+      event_id: `${event_id}_lead`,
+      action_source: "website",
+      event_source_url: event_source_url || FRONTEND_ORIGIN,
+      user_data,
+      custom_data: {
+        content_name: `${track_id} - ${provider}`,
+        content_category: "music_streaming",
+        value: 1.0,
+        currency: "USD",
+        provider,
+        track_id,
+        button_pos: position,
+        ...utms,
+      },
+    };
+
     // Only send to Meta if credentials are available
     if (metaPixelId && metaCapiToken) {
       const metaPayload: Record<string, unknown> = {
-        data: [payload],
+        data: [customPayload, leadPayload], // Send both events
         access_token: metaCapiToken,
       };
 
@@ -129,7 +154,8 @@ serve(async (req) => {
           status: res.status,
           statusText: res.statusText,
           response: metaResponse,
-          payload: payload,
+          customPayload,
+          leadPayload,
         });
       } else {
         console.log("Meta CAPI Success:", metaResponse);

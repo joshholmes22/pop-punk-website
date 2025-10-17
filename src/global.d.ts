@@ -1,6 +1,6 @@
 // global.d.ts
 type FbqCommand = "track" | "trackCustom";
-type FbqEventName = "PageView" | "OutboundClick";
+type FbqEventName = "PageView" | "Lead" | "Contact" | "CompleteRegistration" | "OutboundClick";
 
 interface Window {
   fbq?: (

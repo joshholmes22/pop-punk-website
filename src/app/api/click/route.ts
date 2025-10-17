@@ -43,7 +43,11 @@ const isBot = (ua: string) => {
 };
 
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for") || "0.0.0.0";
+  // Extract the first (client) IP from x-forwarded-for header
+  // Format can be: "client, proxy1, proxy2" or "client"
+  const forwardedFor = req.headers.get("x-forwarded-for") || "0.0.0.0";
+  const ip = forwardedFor.split(",")[0].trim();
+  
   const ua = req.headers.get("user-agent") || "";
 
   // 🚫 Block obvious bots
@@ -118,7 +122,8 @@ export async function POST(req: NextRequest) {
   if (fbp) user_data.fbp = fbp;
   if (fbc) user_data.fbc = fbc;
 
-  const capiPayload = {
+  // Custom event for detailed tracking
+  const customPayload = {
     event_name: "OutboundClick",
     event_time: Math.floor(Date.now() / 1000),
     event_id,
@@ -133,10 +138,30 @@ export async function POST(req: NextRequest) {
     },
   };
 
+  // Standard Lead conversion event for ad optimization
+  const leadPayload = {
+    event_name: "Lead",
+    event_time: Math.floor(Date.now() / 1000),
+    event_id: `${event_id}_lead`,
+    action_source: "website",
+    event_source_url: event_source_url || "https://www.joshholmesmusic.com",
+    user_data,
+    custom_data: {
+      content_name: `${track_id} - ${provider}`,
+      content_category: "music_streaming",
+      value: 1.0,
+      currency: "USD",
+      provider,
+      track_id,
+      button_pos: position,
+      ...utms,
+    },
+  };
+
   // Only send to Meta if credentials are configured
   if (process.env.META_PIXEL_ID && process.env.META_CAPI_TOKEN) {
     const metaPayload: Record<string, unknown> = {
-      data: [capiPayload],
+      data: [customPayload, leadPayload], // Send both events
       access_token: process.env.META_CAPI_TOKEN,
     };
 
@@ -159,7 +184,8 @@ export async function POST(req: NextRequest) {
           status: res.status,
           statusText: res.statusText,
           response: resBody,
-          payload: capiPayload,
+          customPayload,
+          leadPayload,
         });
       } else {
         console.log("Meta CAPI Success:", resBody);

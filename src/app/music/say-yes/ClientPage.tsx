@@ -85,11 +85,21 @@ export default function SayYesPage() {
     const eventId = uuidv4();
 
     if (typeof window !== "undefined" && window.fbq) {
+      // Track as custom event for detailed tracking
       window.fbq("trackCustom", "OutboundClick", {
         provider,
         track_id: TRACK_ID,
         position,
         event_id: eventId,
+      });
+
+      // Also track as standard Lead event for ad optimization
+      window.fbq("track", "Lead", {
+        content_name: `${TRACK_ID} - ${provider}`,
+        content_category: "music_streaming",
+        value: 1.0,
+        currency: "USD",
+        event_id: `${eventId}_lead`,
       });
     }
 
