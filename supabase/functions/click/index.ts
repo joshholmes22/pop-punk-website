@@ -26,10 +26,12 @@ serve(async (req) => {
 
     const {
       event_id,
+      visit_id,
       page_event_id,
       track_id,
       provider,
       position,
+      event_type, // 'pageview' or 'click'
       utms,
       redirect_url,
       event_source_url,
@@ -55,24 +57,44 @@ serve(async (req) => {
     const fbp = cookie.match(/_fbp=([^;]+)/)?.[1] || null;
     const fbc = cookie.match(/_fbc=([^;]+)/)?.[1] || null;
 
-    const visitId = crypto.randomUUID();
-
-    // Run both Supabase inserts in parallel for better performance
-    await Promise.all([
-      supabase.from("visits").insert([
+    // Determine if this is a pageview (create visit) or click (create event only)
+    if (event_type === "pageview") {
+      console.log(`Creating visit ${visit_id} for track ${track_id}`);
+      
+      // Create visit record on page load
+      const visitResult = await supabase.from("visits").insert([
         {
-          id: visitId,
+          id: visit_id,
           fbp,
           fbc,
           ip_trunc: ip.split(".").slice(0, 3).join(".") + ".*",
           ua,
           utms,
         },
-      ]),
-      supabase.from("events").insert([
+      ]);
+
+      if (visitResult.error) {
+        console.error("Visit insert error:", visitResult.error);
+        throw new Error(`Visit insert failed: ${visitResult.error.message}`);
+      }
+
+      console.log(`✅ Successfully created visit ${visit_id} for track ${track_id}`);
+
+      return new Response(JSON.stringify({ success: true, visit_id }), {
+        status: 200,
+        headers: {
+          ...corsHeaders(),
+          "Content-Type": "application/json",
+        },
+      });
+    }
+
+    // For clicks, create event linked to existing visit
+    if (event_type === "click") {
+      const eventResult = await supabase.from("events").insert([
         {
           id: event_id,
-          visit_id: visitId,
+          visit_id: visit_id, // Use visit_id from page load
           type: "click",
           provider,
           track_id,
@@ -80,93 +102,101 @@ serve(async (req) => {
           event_time: new Date().toISOString(),
           meta_event_id: page_event_id,
         },
-      ])
-    ]);
-
-    // Build user_data, excluding null values
-    const user_data: Record<string, string> = {
-      client_ip_address: ip,
-      client_user_agent: ua,
-    };
-    
-    if (fbp) user_data.fbp = fbp;
-    if (fbc) user_data.fbc = fbc;
-
-    // Custom event for detailed tracking
-    const customPayload = {
-      event_name: "OutboundClick",
-      event_time: Math.floor(Date.now() / 1000),
-      event_id,
-      action_source: "website",
-      event_source_url: event_source_url || FRONTEND_ORIGIN,
-      user_data,
-      custom_data: {
-        provider,
-        track_id,
-        button_pos: position,
-        ...utms,
-      },
-    };
-
-    // Standard Lead conversion event for ad optimization
-    const leadPayload = {
-      event_name: "Lead",
-      event_time: Math.floor(Date.now() / 1000),
-      event_id: `${event_id}_lead`,
-      action_source: "website",
-      event_source_url: event_source_url || FRONTEND_ORIGIN,
-      user_data,
-      custom_data: {
-        content_name: `${track_id} - ${provider}`,
-        content_category: "music_streaming",
-        value: 1.0,
-        currency: "USD",
-        provider,
-        track_id,
-        button_pos: position,
-        ...utms,
-      },
-    };
-
-    // Only send to Meta if credentials are available
-    // Fire-and-forget: Don't wait for Meta API response to speed up redirect
-    if (metaPixelId && metaCapiToken) {
-      const metaPayload: Record<string, unknown> = {
-        data: [customPayload, leadPayload], // Send both events
-        access_token: metaCapiToken,
-      };
-
-      // Add test_event_code if in development/testing
-      const testEventCode = Deno.env.get("META_TEST_EVENT_CODE");
-      if (testEventCode) {
-        metaPayload.test_event_code = testEventCode;
+      ]);
+      
+      if (eventResult.error) {
+        console.error("Event insert error:", eventResult.error);
+        throw new Error(`Event insert failed: ${eventResult.error.message}`);
       }
 
-      // Fire and forget - don't await! This makes the response much faster
-      fetch(
-        `https://graph.facebook.com/v18.0/${metaPixelId}/events`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(metaPayload),
+      console.log(`Logged ${provider} click for visit ${visit_id}`);
+
+      // Only send Meta CAPI for clicks, not pageviews
+      // Build user_data, excluding null values
+      const user_data: Record<string, string> = {
+        client_ip_address: ip,
+        client_user_agent: ua,
+      };
+      
+      if (fbp) user_data.fbp = fbp;
+      if (fbc) user_data.fbc = fbc;
+
+      // Custom event for detailed tracking
+      const customPayload = {
+        event_name: "OutboundClick",
+        event_time: Math.floor(Date.now() / 1000),
+        event_id,
+        action_source: "website",
+        event_source_url: event_source_url || FRONTEND_ORIGIN,
+        user_data,
+        custom_data: {
+          provider,
+          track_id,
+          button_pos: position,
+          ...utms,
+        },
+      };
+
+      // Standard Lead conversion event for ad optimization
+      const leadPayload = {
+        event_name: "Lead",
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: `${event_id}_lead`,
+        action_source: "website",
+        event_source_url: event_source_url || FRONTEND_ORIGIN,
+        user_data,
+        custom_data: {
+          content_name: `${track_id} - ${provider}`,
+          content_category: "music_streaming",
+          value: 1.0,
+          currency: "USD",
+          provider,
+          track_id,
+          button_pos: position,
+          ...utms,
+        },
+      };
+
+      // Only send to Meta if credentials are available
+      // Fire-and-forget: Don't wait for Meta API response to speed up redirect
+      if (metaPixelId && metaCapiToken) {
+        const metaPayload: Record<string, unknown> = {
+          data: [customPayload, leadPayload], // Send both events
+          access_token: metaCapiToken,
+        };
+
+        // Add test_event_code if in development/testing
+        const testEventCode = Deno.env.get("META_TEST_EVENT_CODE");
+        if (testEventCode) {
+          metaPayload.test_event_code = testEventCode;
         }
-      ).then(async (res) => {
-        const metaResponse = await res.json();
-        if (!res.ok) {
-          console.error("Meta CAPI Error:", {
-            status: res.status,
-            statusText: res.statusText,
-            response: metaResponse,
-            customPayload,
-            leadPayload,
-          });
-        } else {
-          console.log("Meta CAPI Success:", metaResponse);
-        }
-      }).catch((error) => {
-        console.error("Meta CAPI Request Failed:", error);
-      });
-    }
+
+        // Fire and forget - don't await! This makes the response much faster
+        fetch(
+          `https://graph.facebook.com/v18.0/${metaPixelId}/events`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(metaPayload),
+          }
+        ).then(async (res) => {
+          const metaResponse = await res.json();
+          if (!res.ok) {
+            console.error("Meta CAPI Error:", {
+              status: res.status,
+              statusText: res.statusText,
+              response: metaResponse,
+              customPayload,
+              leadPayload,
+            });
+          } else {
+            console.log("Meta CAPI Success:", metaResponse);
+          }
+        }).catch((error) => {
+          console.error("Meta CAPI Request Failed:", error);
+        });
+      }
+    } // Close the if (event_type === "click") block
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,

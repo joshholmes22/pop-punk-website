@@ -7,6 +7,7 @@ import Image from "next/image";
 
 const TRACK_ID = "say-yes";
 const PAGE_EVENT_ID = uuidv4();
+const VISIT_ID = uuidv4(); // Generate once per page load
 
 const PLATFORMS = [
   {
@@ -70,12 +71,41 @@ export default function SayYesPage() {
   searchParams.forEach((val, key) => (utms[key] = val));
 
   useEffect(() => {
+    // Track PageView with Meta Pixel
     if (typeof window !== "undefined" && window.fbq) {
       window.fbq("track", "PageView", {
         event_id: PAGE_EVENT_ID,
       });
     }
-  }, []);
+
+    // Create visit record in database on page load
+    const createVisit = async () => {
+      try {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/click`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              visit_id: VISIT_ID,
+              page_event_id: PAGE_EVENT_ID,
+              track_id: TRACK_ID,
+              event_type: "pageview",
+              utms,
+              event_source_url: window.location.href,
+            }),
+          }
+        );
+      } catch (err) {
+        console.error("Error creating visit:", err);
+      }
+    };
+
+    createVisit();
+  }, [utms]);
 
   const handleClick = async (
     provider: string,
@@ -105,10 +135,12 @@ export default function SayYesPage() {
 
     const body = {
       event_id: eventId,
+      visit_id: VISIT_ID, // Link to the visit created on page load
       page_event_id: PAGE_EVENT_ID,
       track_id: TRACK_ID,
       provider,
       position,
+      event_type: "click",
       utms,
       redirect_url: url,
       event_source_url:
