@@ -131,6 +131,7 @@ export default function SayYesPage() {
       window.location.href = url;
     } catch (err) {
       console.error("Error logging click:", err);
+      // Still redirect to platform even if tracking fails
       window.location.href = url;
     }
   };

@@ -43,6 +43,10 @@ const isBot = (ua: string) => {
 };
 
 export async function POST(req: NextRequest) {
+  // 🎯 Performance tracking
+  const perfStart = Date.now();
+  const timings: Record<string, number> = {};
+  
   // Extract the first (client) IP from x-forwarded-for header
   // Format can be: "client, proxy1, proxy2" or "client"
   const forwardedFor = req.headers.get("x-forwarded-for") || "0.0.0.0";
@@ -63,7 +67,10 @@ export async function POST(req: NextRequest) {
   }
   ipAccessMap.set(ip, now);
 
+  const bodyParseStart = Date.now();
   const body = await req.json();
+  timings.bodyParse = Date.now() - bodyParseStart;
+  
   const {
     event_id,
     page_event_id,
@@ -79,6 +86,7 @@ export async function POST(req: NextRequest) {
   const dedupKey = `${ip}-${track_id}-${provider}`;
   const lastClick = dedupCache.get(dedupKey) || 0;
   if (now - lastClick < DEDUP_WINDOW_MS) {
+    console.log(`[PERF] Deduplicated request for ${provider}`);
     return NextResponse.redirect(redirect_url, { status: 302 });
   }
   dedupCache.set(dedupKey, now);
@@ -89,6 +97,8 @@ export async function POST(req: NextRequest) {
 
   const visitId = uuidv4();
 
+  // Insert visit record
+  const visitInsertStart = Date.now();
   await supabase.from("visits").insert([
     {
       id: visitId,
@@ -99,7 +109,10 @@ export async function POST(req: NextRequest) {
       utms,
     },
   ]);
+  timings.visitInsert = Date.now() - visitInsertStart;
 
+  // Insert event record
+  const eventInsertStart = Date.now();
   await supabase.from("events").insert([
     {
       id: event_id,
@@ -112,6 +125,7 @@ export async function POST(req: NextRequest) {
       meta_event_id: page_event_id,
     },
   ]);
+  timings.eventInsert = Date.now() - eventInsertStart;
 
   // Build user_data, excluding null values
   const user_data: Record<string, string> = {
@@ -171,11 +185,15 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+      const metaApiStart = Date.now();
+      
       const res = await fetch(CAPI_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(metaPayload),
       });
+      
+      timings.metaApiCall = Date.now() - metaApiStart;
 
       const resBody = await res.json();
       
@@ -191,11 +209,35 @@ export async function POST(req: NextRequest) {
         console.log("Meta CAPI Success:", resBody);
       }
     } catch (error) {
+      timings.metaApiCall = Date.now() - (timings.metaApiCall || Date.now());
       console.error("Meta CAPI Request Failed:", error);
     }
   } else {
     console.warn("Meta CAPI credentials not configured");
+    timings.metaApiCall = 0;
   }
+
+  // Calculate total duration
+  const totalDuration = Date.now() - perfStart;
+  timings.total = totalDuration;
+
+  // Log performance metrics
+  console.log(`[PERF] Click processing for ${provider}:`, {
+    provider,
+    track_id,
+    timings: {
+      bodyParse: `${timings.bodyParse}ms`,
+      visitInsert: `${timings.visitInsert}ms`,
+      eventInsert: `${timings.eventInsert}ms`,
+      metaApiCall: `${timings.metaApiCall}ms`,
+      total: `${timings.total}ms`,
+    },
+    breakdown: {
+      supabase: `${timings.visitInsert + timings.eventInsert}ms (${Math.round(((timings.visitInsert + timings.eventInsert) / totalDuration) * 100)}%)`,
+      metaApi: `${timings.metaApiCall}ms (${Math.round((timings.metaApiCall / totalDuration) * 100)}%)`,
+      overhead: `${totalDuration - timings.visitInsert - timings.eventInsert - timings.metaApiCall}ms`,
+    },
+  });
 
   return NextResponse.redirect(redirect_url, { status: 302 });
 }

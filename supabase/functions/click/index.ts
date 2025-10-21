@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FRONTEND_ORIGIN = "https://www.joshholmesmusic.com";
+const LOCALHOST_ORIGIN = "http://localhost:3000";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -56,28 +57,30 @@ serve(async (req) => {
 
     const visitId = crypto.randomUUID();
 
-    await supabase.from("visits").insert([
-      {
-        id: visitId,
-        fbp,
-        fbc,
-        ip_trunc: ip.split(".").slice(0, 3).join(".") + ".*",
-        ua,
-        utms,
-      },
-    ]);
-
-    await supabase.from("events").insert([
-      {
-        id: event_id,
-        visit_id: visitId,
-        type: "click",
-        provider,
-        track_id,
-        button_pos: position,
-        event_time: new Date().toISOString(),
-        meta_event_id: page_event_id,
-      },
+    // Run both Supabase inserts in parallel for better performance
+    await Promise.all([
+      supabase.from("visits").insert([
+        {
+          id: visitId,
+          fbp,
+          fbc,
+          ip_trunc: ip.split(".").slice(0, 3).join(".") + ".*",
+          ua,
+          utms,
+        },
+      ]),
+      supabase.from("events").insert([
+        {
+          id: event_id,
+          visit_id: visitId,
+          type: "click",
+          provider,
+          track_id,
+          button_pos: position,
+          event_time: new Date().toISOString(),
+          meta_event_id: page_event_id,
+        },
+      ])
     ]);
 
     // Build user_data, excluding null values
@@ -126,6 +129,7 @@ serve(async (req) => {
     };
 
     // Only send to Meta if credentials are available
+    // Fire-and-forget: Don't wait for Meta API response to speed up redirect
     if (metaPixelId && metaCapiToken) {
       const metaPayload: Record<string, unknown> = {
         data: [customPayload, leadPayload], // Send both events
@@ -138,28 +142,30 @@ serve(async (req) => {
         metaPayload.test_event_code = testEventCode;
       }
 
-      const res = await fetch(
+      // Fire and forget - don't await! This makes the response much faster
+      fetch(
         `https://graph.facebook.com/v18.0/${metaPixelId}/events`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(metaPayload),
         }
-      );
-
-      const metaResponse = await res.json();
-      
-      if (!res.ok) {
-        console.error("Meta CAPI Error:", {
-          status: res.status,
-          statusText: res.statusText,
-          response: metaResponse,
-          customPayload,
-          leadPayload,
-        });
-      } else {
-        console.log("Meta CAPI Success:", metaResponse);
-      }
+      ).then(async (res) => {
+        const metaResponse = await res.json();
+        if (!res.ok) {
+          console.error("Meta CAPI Error:", {
+            status: res.status,
+            statusText: res.statusText,
+            response: metaResponse,
+            customPayload,
+            leadPayload,
+          });
+        } else {
+          console.log("Meta CAPI Success:", metaResponse);
+        }
+      }).catch((error) => {
+        console.error("Meta CAPI Request Failed:", error);
+      });
     }
 
     return new Response(JSON.stringify({ success: true }), {
@@ -182,8 +188,9 @@ serve(async (req) => {
 });
 
 function corsHeaders(): HeadersInit {
+  // Allow both production and localhost origins
   return {
-    "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+    "Access-Control-Allow-Origin": "*", // Or use the origin from the request
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "content-type, authorization",
   };
