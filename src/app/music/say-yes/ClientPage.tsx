@@ -65,6 +65,7 @@ const SOCIALS = [
 
 export default function SayYesPage() {
   const [showMore, setShowMore] = useState(false);
+  const [delayedShowMore, setDelayedShowMore] = useState(false);
   const searchParams = useSearchParams();
 
   const utms: Record<string, string> = {};
@@ -105,6 +106,13 @@ export default function SayYesPage() {
     };
 
     createVisit();
+
+    // Delay "More Platforms" visibility by 3 seconds
+    const timer = setTimeout(() => {
+      setDelayedShowMore(true);
+    }, 3000);
+
+    return () => clearTimeout(timer);
   }, [utms]);
 
   const handleClick = async (
@@ -184,48 +192,53 @@ export default function SayYesPage() {
       </div>
 
       <main className="relative z-10 flex items-center justify-center min-h-screen px-4 py-12">
-        <div className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-xl p-6 text-center space-y-6 animate-fadeInUp">
+        <div className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-xl p-6 text-center space-y-4 animate-fadeInUp">
           <Image
             src="/artwork/say-yes.png"
             alt="Say Yes Cover"
-            width={160}
-            height={160}
+            width={180}
+            height={180}
             className="mx-auto rounded-lg shadow-md object-cover border border-white/20"
             priority
           />
 
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center justify-center gap-2">
+            <h1 className="text-2xl font-bold text-white">
               Say Yes - Josh Holmes
             </h1>
-            <p className="text-sm text-white/80 mt-1">
-              Stream the new catchy pop punk song now.
+            <p className="text-base text-white/90 mt-2 font-medium">
+              The UK pop punk sound you've been missing 🎸🇬🇧
+            </p>
+            <p className="text-sm text-white/70 mt-1">
+              700,000+ streams worldwide 🌍
             </p>
           </div>
 
           <button
             onClick={() => handleClick(spotify.provider, spotify.url, "hero")}
             style={{ backgroundColor: spotify.color }}
-            className="w-full py-2.5 text-white font-semibold rounded-xl shadow transition hover:brightness-110 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3.5 text-white text-lg font-bold rounded-xl shadow-lg transition hover:brightness-110 hover:scale-105 flex items-center justify-center gap-2 cursor-pointer animate-pulse-subtle"
           >
             <Image
               src={spotify.icon}
               alt={spotify.provider}
-              width={20}
-              height={20}
-            />{" "}
-            {spotify.name}
+              width={24}
+              height={24}
+            />
+            🎧 Listen on {spotify.name}
           </button>
 
-          <button
-            onClick={() => setShowMore(!showMore)}
-            className="text-sm text-white/70 hover:text-white underline cursor-pointer"
-          >
-            {showMore ? "Hide other platforms" : "More Platforms"}
-          </button>
+          {delayedShowMore && (
+            <button
+              onClick={() => setShowMore(!showMore)}
+              className="text-sm text-white/60 hover:text-white/90 underline cursor-pointer transition"
+            >
+              {showMore ? "Hide other platforms" : "More Platforms"}
+            </button>
+          )}
 
           {showMore && (
-            <ul className="space-y-2 pt-2">
+            <ul className="space-y-2 pt-2 animate-fadeIn">
               {PLATFORMS.filter((p) => p.provider !== "spotify").map((p) => (
                 <li key={p.provider}>
                   <button

@@ -91,6 +91,37 @@ serve(async (req) => {
 
     // For clicks, create event linked to existing visit
     if (event_type === "click") {
+      // First, check if visit exists - if not, create it (fallback for edge cases)
+      const { data: existingVisit } = await supabase
+        .from("visits")
+        .select("id")
+        .eq("id", visit_id)
+        .single();
+
+      if (!existingVisit) {
+        console.warn(`Visit ${visit_id} not found, creating it now`);
+        
+        // Create the visit that should have been created on page load
+        const visitResult = await supabase.from("visits").insert([
+          {
+            id: visit_id,
+            fbp,
+            fbc,
+            ip_trunc: ip.split(".").slice(0, 3).join(".") + ".*",
+            ua,
+            utms,
+          },
+        ]);
+
+        if (visitResult.error) {
+          console.error("Visit insert error:", visitResult.error);
+          throw new Error(`Visit insert failed: ${visitResult.error.message}`);
+        }
+        
+        console.log(`Created missing visit ${visit_id}`);
+      }
+
+      // Now insert the event
       const eventResult = await supabase.from("events").insert([
         {
           id: event_id,
@@ -109,7 +140,7 @@ serve(async (req) => {
         throw new Error(`Event insert failed: ${eventResult.error.message}`);
       }
 
-      console.log(`Logged ${provider} click for visit ${visit_id}`);
+      console.log(`✅ Logged ${provider} click for visit ${visit_id}`);
 
       // Only send Meta CAPI for clicks, not pageviews
       // Build user_data, excluding null values
