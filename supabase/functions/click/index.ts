@@ -27,7 +27,6 @@ serve(async (req) => {
     const {
       event_id,
       visit_id,
-      page_event_id,
       track_id,
       provider,
       position,
@@ -131,7 +130,6 @@ serve(async (req) => {
           track_id,
           button_pos: position,
           event_time: new Date().toISOString(),
-          meta_event_id: page_event_id,
         },
       ]);
       
