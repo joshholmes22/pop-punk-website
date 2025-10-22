@@ -111,7 +111,7 @@ export default function SayYesPage() {
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [utms]);
+  }, [utms, visitId]);
 
   const handleClick = async (
     provider: string,
@@ -204,7 +204,7 @@ export default function SayYesPage() {
               Say Yes - Josh Holmes
             </h1>
             <p className="text-base text-white/90 mt-2 font-medium">
-              The UK pop punk sound you've been missing 🎸🇬🇧
+              The UK pop punk sound you&apos;ve been missing 🎸🇬🇧
             </p>
             <p className="text-sm text-white/70 mt-1">
               700,000+ streams worldwide 🌍
