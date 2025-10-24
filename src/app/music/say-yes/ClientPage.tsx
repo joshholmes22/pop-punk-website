@@ -79,31 +79,18 @@ export default function SayYesPage() {
     }
 
     // Create visit record in database on page load
-    const createVisit = async () => {
-      try {
-        await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/click`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY}`,
-            },
-            body: JSON.stringify({
-              visit_id: visitId,
-              track_id: TRACK_ID,
-              event_type: "pageview",
-              utms,
-              event_source_url: window.location.href,
-            }),
-          }
-        );
-      } catch (err) {
-        console.error("Error creating visit:", err);
-      }
-    };
-
-    createVisit();
+    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/click`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        visit_id: visitId,
+        track_id: TRACK_ID,
+        event_type: "pageview",
+      }),
+    }).catch(() => {}); // Ignore errors, don't block page load
 
     // Delay "More Platforms" visibility by 3 seconds
     const timer = setTimeout(() => {
@@ -111,7 +98,7 @@ export default function SayYesPage() {
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [utms, visitId]);
+  }, [visitId]);
 
   const handleClick = async (
     provider: string,
@@ -120,57 +107,33 @@ export default function SayYesPage() {
   ) => {
     const eventId = uuidv4();
 
+    // Track with Meta Pixel
     if (typeof window !== "undefined" && window.fbq) {
-      // Track as custom event for detailed tracking
-      window.fbq("trackCustom", "OutboundClick", {
-        provider,
-        track_id: TRACK_ID,
-        position,
-        event_id: eventId,
-      });
-
-      // Also track as standard Lead event for ad optimization
       window.fbq("track", "Lead", {
         content_name: `${TRACK_ID} - ${provider}`,
-        content_category: "music_streaming",
-        value: 1.0,
-        currency: "USD",
-        event_id: `${eventId}_lead`,
+        event_id: eventId,
       });
     }
 
-    const body = {
-      event_id: eventId,
-      visit_id: visitId, // Link to the visit created on page load
-      track_id: TRACK_ID,
-      provider,
-      position,
-      event_type: "click",
-      utms,
-      redirect_url: url,
-      event_source_url:
-        typeof window !== "undefined" ? window.location.href : undefined,
-    };
+    // Log click to database (fire and forget)
+    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/click`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        event_id: eventId,
+        visit_id: visitId,
+        track_id: TRACK_ID,
+        provider,
+        position,
+        event_type: "click",
+      }),
+    }).catch(() => {}); // Ignore errors, don't block redirect
 
-    try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/click`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify(body),
-        }
-      );
-
-      window.location.href = url;
-    } catch (err) {
-      console.error("Error logging click:", err);
-      // Still redirect to platform even if tracking fails
-      window.location.href = url;
-    }
+    // Redirect immediately
+    window.location.href = url;
   };
 
   const spotify = PLATFORMS.find((p) => p.provider === "spotify")!;
