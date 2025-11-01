@@ -73,11 +73,6 @@ export default function SayYesPage() {
   searchParams.forEach((val, key) => (utms[key] = val));
 
   useEffect(() => {
-    // Track PageView with Meta Pixel
-    if (typeof window !== "undefined" && window.fbq) {
-      window.fbq("track", "PageView");
-    }
-
     // Create visit record in database on page load
     fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/click`, {
       method: "POST",
@@ -230,16 +225,6 @@ export default function SayYesPage() {
               </a>
             ))}
           </div>
-
-          {/* Meta noscript pixel */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            height="1"
-            width="1"
-            style={{ display: "none" }}
-            src={`https://www.facebook.com/tr?id=${process.env.NEXT_PUBLIC_META_PIXEL_ID}&ev=PageView&noscript=1`}
-            alt="fb pixel"
-          />
         </div>
       </main>
     </div>
