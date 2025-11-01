@@ -132,8 +132,10 @@ export default function SayYesPage() {
       }),
     }).catch(() => {}); // Ignore errors, don't block redirect
 
-    // Redirect immediately
-    window.location.href = url;
+    // Small delay to ensure Meta Pixel event completes before redirect
+    setTimeout(() => {
+      window.location.href = url;
+    }, 300);
   };
 
   const spotify = PLATFORMS.find((p) => p.provider === "spotify")!;
